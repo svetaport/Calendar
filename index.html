@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#14231f" />
+    <title>September 2026 Reservations</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #14231f;
+        --muted: #6d7873;
+        --paper: #f8f6f0;
+        --card: #fffdf8;
+        --line: #dfe4dd;
+        --accent: #dc7456;
+        --accent-dark: #a84831;
+        --green: #dce9df;
+        --shadow: 0 22px 60px rgba(20, 35, 31, 0.13);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background: radial-gradient(circle at top left, #e8efe4, transparent 38%), var(--paper);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .shell { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 64px; }
+      .page-header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 30px; }
+      .eyebrow { margin: 0 0 12px; color: var(--accent-dark); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+      h1 { max-width: 650px; margin: 0; font-family: Georgia, serif; font-size: clamp(2.4rem, 6vw, 4.8rem); font-weight: 500; line-height: 0.95; letter-spacing: -0.055em; }
+      .intro { max-width: 540px; margin: 18px 0 0; color: var(--muted); font-size: 1rem; line-height: 1.55; }
+      .header-note { max-width: 180px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; color: var(--muted); background: rgba(255, 253, 248, 0.72); font-size: 0.78rem; line-height: 1.45; }
+      .header-note strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 0.86rem; }
+
+      .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.85fr); gap: 22px; align-items: start; }
+      .card { border: 1px solid rgba(223, 228, 221, 0.9); border-radius: 24px; background: rgba(255, 253, 248, 0.9); box-shadow: var(--shadow); }
+      .calendar-card { padding: 26px; }
+      .calendar-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
+      .calendar-head h2 { margin: 0; font-family: Georgia, serif; font-size: 1.8rem; font-weight: 500; }
+      .range { color: var(--muted); font-size: 0.82rem; }
+      .weekdays, .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+      .weekdays { margin-bottom: 8px; color: var(--muted); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
+      .day { min-height: 88px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; text-align: left; transition: 160ms ease; }
+      .day.is-empty { visibility: hidden; border-color: transparent; background: transparent; }
+      .day.is-available { cursor: pointer; }
+      .day.is-available:hover, .day.is-selected { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 18px rgba(168, 72, 49, 0.12); }
+      .day.is-selected { background: #fff4ef; }
+      .number { display: block; font-size: 1.05rem; font-weight: 750; }
+      .day-label { display: block; margin-top: 20px; color: var(--muted); font-size: 0.72rem; line-height: 1.2; }
+      .day.has-reservation { background: var(--green); border-color: #a9c5ae; }
+      .reservation-dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--accent-dark); }
+      .form-card { padding: 26px; position: sticky; top: 20px; }
+      .form-card h2 { margin: 0 0 8px; font-family: Georgia, serif; font-size: 1.65rem; font-weight: 500; }
+      .selected-date { margin: 0 0 22px; color: var(--accent-dark); font-size: 0.9rem; font-weight: 750; }
+      label { display: block; margin: 16px 0 7px; font-size: 0.82rem; font-weight: 750; }
+      input, textarea { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 12px 13px; color: var(--ink); background: #fff; font: inherit; }
+      input:focus, textarea:focus { outline: 3px solid rgba(220, 116, 86, 0.22); border-color: var(--accent); }
+      textarea { min-height: 94px; resize: vertical; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+      button { border: 0; border-radius: 999px; padding: 12px 17px; font: inherit; font-size: 0.88rem; font-weight: 800; cursor: pointer; }
+      .primary { color: #fff; background: var(--ink); }
+      .primary:hover { background: #2c4940; }
+      .secondary { color: var(--ink); background: #edf0e9; }
+      .utility-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .utility-actions button { padding: 8px 11px; color: var(--muted); background: transparent; font-size: 0.74rem; }
+      .utility-actions button:hover { color: var(--ink); background: #edf0e9; }
+      .hint { margin: 18px 0 0; color: var(--muted); font-size: 0.76rem; line-height: 1.5; }
+      .status { min-height: 1.2em; margin: 14px 0 0; color: var(--accent-dark); font-size: 0.82rem; font-weight: 700; }
+      .timeline-card { margin-top: 22px; padding: 28px; }
+      .timeline-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
+      .timeline-head h2 { margin: 0; font-family: Georgia, serif; font-size: 1.65rem; font-weight: 500; }
+      .availability { color: var(--muted); font-size: 0.8rem; text-align: right; }
+      .availability strong { display: block; color: var(--ink); font-size: 1.05rem; }
+      .timeline { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+      .time-row { display: grid; grid-template-columns: 64px 1fr; min-height: 42px; border-bottom: 1px solid #edf0eb; }
+      .time-row:last-child { border-bottom: 0; }
+      .time-label { padding: 12px 10px; color: var(--muted); font-size: 0.72rem; text-align: right; }
+      .time-slot { position: relative; padding: 10px 14px; background: #fbfcf8; }
+      .time-slot.free::after { content: 'Free'; color: #78907d; font-size: 0.72rem; }
+      .time-slot.busy { background: #fff0e9; }
+      .busy-label { color: var(--accent-dark); font-size: 0.76rem; font-weight: 800; }
+      .booking-list { display: grid; gap: 8px; margin-top: 14px; }
+      .booking-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; border: 1px solid #efc9bc; border-radius: 10px; padding: 8px 10px 8px 12px; color: var(--accent-dark); background: #fff5f0; text-align: left; }
+      .booking-select { flex: 1; padding: 2px 0; color: inherit; background: transparent; text-align: left; }
+      .booking-item.is-selected { outline: 3px solid rgba(220, 116, 86, 0.22); border-color: var(--accent); }
+      .booking-item span { display: block; }
+      .booking-name { font-size: 0.78rem; font-weight: 800; }
+      .booking-time { margin-top: 3px; color: var(--muted); font-size: 0.72rem; }
+      .delete-booking { flex: 0 0 auto; padding: 7px 10px; color: #fff; background: var(--accent-dark); font-size: 0.72rem; }
+
+      @media (max-width: 780px) {
+        .shell { width: min(100% - 24px, 600px); padding: 32px 0; }
+        .page-header { display: block; }
+        .header-note { margin-top: 18px; }
+        .layout { grid-template-columns: 1fr; }
+        .form-card { position: static; }
+        .calendar-card, .form-card, .timeline-card { padding: 18px; border-radius: 18px; }
+        .day { min-height: 70px; padding: 8px; }
+        .day-label { margin-top: 12px; font-size: 0.65rem; }
+        .range { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Time reserved for you</p>
+          <h1>Make room for what matters.</h1>
+          <p class="intro">A quiet little calendar for planning time between Friday 18 September and Tuesday 29 September 2026.</p>
+        </div>
+        <div class="header-note"><strong>September 18–29</strong>Choose a day to see what is free, then reserve the time you need.</div>
+      </header>
+
+      <section class="layout" aria-label="Reservation calendar">
+        <div>
+          <div class="card calendar-card">
+          <div class="calendar-head">
+            <h2>September 2026</h2>
+            <span class="range">18 Sep — 29 Sep</span>
+          </div>
+          <div class="weekdays" aria-hidden="true">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div class="days" id="days" aria-live="polite"></div>
+          </div>
+          <section class="card timeline-card" aria-label="Daily availability">
+            <div class="timeline-head">
+              <h2 id="timelineTitle">Daily availability</h2>
+              <div class="availability" id="availabilitySummary"></div>
+            </div>
+            <div class="timeline" id="timeline"></div>
+            <div class="booking-list" id="bookingList" aria-label="Bookings for selected day"></div>
+          </section>
+        </div>
+
+        <aside class="card form-card">
+          <h2>Book time</h2>
+          <p class="selected-date" id="selectedDate">Choose a date from the calendar</p>
+          <form id="reservationForm">
+            <label for="title">What are you reserving time for?</label>
+            <input id="title" name="title" type="text" placeholder="e.g. Deep work" required />
+            <label for="start">Starts</label>
+            <input id="start" name="start" type="time" required />
+            <label for="end">Ends</label>
+            <input id="end" name="end" type="time" required />
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" placeholder="Anything worth remembering"></textarea>
+            <div class="actions">
+              <button class="primary" type="submit">Save reservation</button>
+              <button class="secondary" id="newButton" type="button">New booking</button>
+              <button class="secondary" id="deleteButton" type="button" hidden>Delete</button>
+            </div>
+            <div class="utility-actions" aria-label="Booking data tools">
+              <button id="exportButton" type="button">Export bookings</button>
+              <button id="importButton" type="button">Import bookings</button>
+              <input id="importFile" type="file" accept="application/json,.json" hidden />
+            </div>
+            <p class="status" id="status" role="status"></p>
+          </form>
+          <p class="hint">The day runs from 06:00 to 22:00. <span id="modeStatus">Local-only mode — add Supabase settings to share bookings.</span></p>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      (() => {
+        const firstDay = 18;
+        const lastDay = 29;
+        const storageKey = 'clandar-september-2026-reservations';
+        const SUPABASE_URL = 'https://phretkfokstgbxeycxwr.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_uru-bTkXb8vn5ahChElcqQ_COmnov14';
+        const calendarId = new URLSearchParams(window.location.search).get('calendar') || 'shared';
+        const isSupabaseConfigured = SUPABASE_URL.startsWith('https://') && !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
+        const supabaseClient = isSupabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+        let reservations = {};
+        let selectedDay = null;
+        let selectedBookingIndex = null;
+        const days = document.querySelector('#days');
+        const selectedDate = document.querySelector('#selectedDate');
+        const form = document.querySelector('#reservationForm');
+        const status = document.querySelector('#status');
+        const newButton = document.querySelector('#newButton');
+        const deleteButton = document.querySelector('#deleteButton');
+        const exportButton = document.querySelector('#exportButton');
+        const importButton = document.querySelector('#importButton');
+        const importFile = document.querySelector('#importFile');
+        const timeline = document.querySelector('#timeline');
+        const bookingList = document.querySelector('#bookingList');
+        const timelineTitle = document.querySelector('#timelineTitle');
+        const availabilitySummary = document.querySelector('#availabilitySummary');
+        const modeStatus = document.querySelector('#modeStatus');
+
+        const formatDate = (day) => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(2026, 8, day));
+        const minutes = (time) => { const [hours, mins] = time.split(':').map(Number); return hours * 60 + mins; };
+        const formatHours = (totalMinutes) => `${Math.floor(totalMinutes / 60)}h${totalMinutes % 60 ? ` ${totalMinutes % 60}m` : ''}`;
+        const timeLabel = (hour) => `${String(hour).padStart(2, '0')}:00`;
+
+        function saveLocalReservations() {
+          localStorage.setItem(storageKey, JSON.stringify(reservations));
+        }
+
+        function loadLocalReservations() {
+          reservations = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          Object.keys(reservations).forEach((day) => {
+            if (!Array.isArray(reservations[day])) {
+              const legacy = reservations[day];
+              reservations[day] = [{ title: legacy.title, start: legacy.start || legacy.time || '09:00', end: legacy.end || '10:00', notes: legacy.notes || '' }];
+            }
+          });
+        }
+
+        function supabaseDate(day) {
+          return `2026-09-${String(day).padStart(2, '0')}`;
+        }
+
+        function groupRemoteBookings(rows) {
+          reservations = {};
+          rows.forEach((row) => {
+            const day = Number(row.booking_date.slice(-2));
+            (reservations[day] ||= []).push({ id: row.id, title: row.title, start: row.start_time.slice(0, 5), end: row.end_time.slice(0, 5), notes: row.notes || '' });
+          });
+        }
+
+        async function loadReservations() {
+          if (!supabaseClient) {
+            loadLocalReservations();
+            modeStatus.textContent = 'Local-only mode — add Supabase settings to share bookings.';
+            renderCalendar();
+            renderTimeline();
+            return;
+          }
+          const { data, error } = await supabaseClient.from('calendar_bookings').select('*').eq('calendar_id', calendarId).gte('booking_date', '2026-09-18').lte('booking_date', '2026-09-29').order('start_time');
+          if (error) {
+            loadLocalReservations();
+            modeStatus.textContent = `Shared mode unavailable: ${error.message}`;
+            renderCalendar();
+            renderTimeline();
+            return;
+          }
+          groupRemoteBookings(data || []);
+          modeStatus.textContent = `Shared online calendar · ${calendarId}`;
+          renderCalendar();
+          renderTimeline();
+        }
+
+        function reservationAt(day, hour) {
+          const hourStart = hour * 60;
+          return reservations[day]?.find((booking) => minutes(booking.start) < hourStart + 60 && minutes(booking.end) > hourStart);
+        }
+
+        function renderTimeline() {
+          if (!selectedDay) {
+            timeline.innerHTML = '<div class="time-row"><div class="time-slot free" style="grid-column: 1 / -1">Select a date to see its availability.</div></div>';
+            bookingList.innerHTML = '';
+            availabilitySummary.textContent = '';
+            return;
+          }
+          timelineTitle.textContent = `${formatDate(selectedDay).split(',')[0]} availability`;
+          const bookings = reservations[selectedDay] || [];
+          const busyMinutes = bookings.reduce((total, booking) => total + minutes(booking.end) - minutes(booking.start), 0);
+          availabilitySummary.innerHTML = `<strong>${formatHours(960 - busyMinutes)} free</strong>${formatHours(busyMinutes)} busy`;
+          timeline.innerHTML = '';
+          for (let hour = 6; hour < 22; hour += 1) {
+            const booking = reservationAt(selectedDay, hour);
+            const row = document.createElement('div');
+            row.className = 'time-row';
+            row.innerHTML = `<div class="time-label">${timeLabel(hour)}</div><div class="time-slot ${booking ? 'busy' : 'free'}">${booking ? `<span class="busy-label">${booking.title} · ${booking.start}–${booking.end}</span>` : ''}</div>`;
+            timeline.append(row);
+          }
+          bookingList.innerHTML = '';
+          bookings.forEach((booking, index) => {
+            const item = document.createElement('div');
+            item.className = `booking-item${index === selectedBookingIndex ? ' is-selected' : ''}`;
+            item.innerHTML = `<button type="button" class="booking-select"><span class="booking-name">${booking.title}</span><span class="booking-time">${booking.start}–${booking.end}</span></button><button type="button" class="delete-booking" aria-label="Delete ${booking.title}">Delete</button>`;
+            item.querySelector('.booking-select').addEventListener('click', () => selectBooking(selectedDay, index));
+            item.querySelector('.delete-booking').addEventListener('click', () => deleteBooking(index));
+            bookingList.append(item);
+          });
+        }
+
+        function renderCalendar() {
+          const leadingEmptyDays = new Date(2026, 8, firstDay).getDay();
+          days.innerHTML = '';
+          for (let index = 0; index < leadingEmptyDays; index += 1) {
+            const empty = document.createElement('span');
+            empty.className = 'day is-empty';
+            days.append(empty);
+          }
+          for (let day = firstDay; day <= lastDay; day += 1) {
+            const button = document.createElement('button');
+            const reservation = reservations[day]?.[0];
+            button.className = `day is-available${day === selectedDay ? ' is-selected' : ''}${reservation ? ' has-reservation' : ''}`;
+            button.type = 'button';
+            button.dataset.day = day;
+            button.setAttribute('aria-label', `${formatDate(day)}${reservation ? `, reserved for ${reservation.title}` : ''}`);
+            button.innerHTML = `<span class="number">${day}</span><span class="day-label">${reservation ? `<span class="reservation-dot"></span>${reservation.title}` : 'Available'}</span>`;
+            button.addEventListener('click', () => selectDay(day));
+            days.append(button);
+          }
+        }
+
+        function selectDay(day) {
+          selectedDay = day;
+          selectedBookingIndex = reservations[day]?.length ? 0 : null;
+          loadSelectedBooking();
+          renderCalendar();
+          renderTimeline();
+        }
+
+        function selectBooking(day, index) {
+          selectedDay = day;
+          selectedBookingIndex = index;
+          loadSelectedBooking();
+          renderCalendar();
+          renderTimeline();
+        }
+
+        function loadSelectedBooking() {
+          selectedDate.textContent = selectedDay ? formatDate(selectedDay) : 'Choose a date from the calendar';
+          const booking = selectedDay !== null && selectedBookingIndex !== null ? reservations[selectedDay]?.[selectedBookingIndex] : null;
+          document.querySelector('#title').value = booking?.title || '';
+          document.querySelector('#start').value = booking?.start || '';
+          document.querySelector('#end').value = booking?.end || '';
+          document.querySelector('#notes').value = booking?.notes || '';
+          deleteButton.hidden = !booking;
+          status.textContent = booking ? 'Editing the selected booking.' : '';
+        }
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!selectedDay) {
+            status.textContent = 'Choose a date first.';
+            return;
+          }
+          const data = new FormData(form);
+          const booking = { title: data.get('title'), start: data.get('start'), end: data.get('end'), notes: data.get('notes') };
+          const existing = reservations[selectedDay] || [];
+          if (selectedBookingIndex === null) {
+            if (supabaseClient) {
+              const { data, error } = await supabaseClient.from('calendar_bookings').insert({ calendar_id: calendarId, booking_date: supabaseDate(selectedDay), title: booking.title, start_time: booking.start, end_time: booking.end, notes: booking.notes }).select().single();
+              if (error) { status.textContent = `Could not save booking: ${error.message}`; return; }
+              reservations[selectedDay] = [...existing, { ...booking, id: data.id }];
+            } else {
+              reservations[selectedDay] = [...existing, booking];
+              saveLocalReservations();
+            }
+            selectedBookingIndex = reservations[selectedDay].length - 1;
+          } else {
+            const existingBooking = existing[selectedBookingIndex];
+            if (supabaseClient && existingBooking.id) {
+              const { error } = await supabaseClient.from('calendar_bookings').update({ title: booking.title, start_time: booking.start, end_time: booking.end, notes: booking.notes }).eq('id', existingBooking.id);
+              if (error) { status.textContent = `Could not update booking: ${error.message}`; return; }
+            } else if (supabaseClient) {
+              const { data, error } = await supabaseClient.from('calendar_bookings').insert({ calendar_id: calendarId, booking_date: supabaseDate(selectedDay), title: booking.title, start_time: booking.start, end_time: booking.end, notes: booking.notes }).select().single();
+              if (error) { status.textContent = `Could not save booking: ${error.message}`; return; }
+              booking.id = data.id;
+            }
+            reservations[selectedDay][selectedBookingIndex] = booking;
+            if (!supabaseClient) saveLocalReservations();
+          }
+          status.textContent = 'Booking saved.';
+          renderCalendar();
+          renderTimeline();
+        });
+
+        newButton.addEventListener('click', () => {
+          selectedBookingIndex = null;
+          form.reset();
+          deleteButton.hidden = true;
+          status.textContent = selectedDay ? 'Ready for a new booking.' : 'Choose a date first.';
+          renderTimeline();
+        });
+
+        async function deleteBooking(index) {
+          if (!selectedDay || !reservations[selectedDay]?.[index]) return;
+          const booking = reservations[selectedDay][index];
+          if (supabaseClient && booking.id) {
+            const { error } = await supabaseClient.from('calendar_bookings').delete().eq('id', booking.id);
+            if (error) { status.textContent = `Could not delete booking: ${error.message}`; return; }
+          }
+          reservations[selectedDay].splice(index, 1);
+          if (reservations[selectedDay].length === 0) delete reservations[selectedDay];
+          selectedBookingIndex = null;
+          if (!supabaseClient) saveLocalReservations();
+          form.reset();
+          deleteButton.hidden = true;
+          status.textContent = 'Booking deleted.';
+          renderCalendar();
+          renderTimeline();
+        }
+
+        deleteButton.addEventListener('click', () => {
+          if (selectedBookingIndex !== null) deleteBooking(selectedBookingIndex);
+        });
+
+        exportButton.addEventListener('click', () => {
+          const exported = Object.entries(reservations).flatMap(([day, bookings]) => bookings.map((booking) => ({ day: Number(day), title: booking.title, start: booking.start, end: booking.end, notes: booking.notes || '' })));
+          const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = 'bookings.json';
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+          status.textContent = `Exported ${exported.length} booking${exported.length === 1 ? '' : 's'}.`;
+        });
+
+        importButton.addEventListener('click', () => importFile.click());
+        importFile.addEventListener('change', async () => {
+          const file = importFile.files?.[0];
+          if (!file) return;
+          try {
+            const source = JSON.parse(await file.text());
+            reservations = {};
+            const add = (day, value) => {
+              const dayNumber = Number(day);
+              if (dayNumber < firstDay || dayNumber > lastDay) return;
+              const bookings = Array.isArray(value) ? value : [value];
+              reservations[dayNumber] = bookings.map((booking) => ({ title: booking.title, start: booking.start, end: booking.end, notes: booking.notes || '' }));
+            };
+            if (Array.isArray(source)) source.forEach((booking) => add(booking.day, booking));
+            else Object.entries(source).forEach(([day, bookings]) => add(day, bookings));
+            saveLocalReservations();
+            selectedDay = null;
+            selectedBookingIndex = null;
+            renderCalendar();
+            renderTimeline();
+            status.textContent = `Imported ${Object.values(reservations).flat().length} booking${Object.values(reservations).flat().length === 1 ? '' : 's'}.`;
+          } catch (error) {
+            status.textContent = `Could not import bookings: ${error.message}`;
+          } finally {
+            importFile.value = '';
+          }
+        });
+
+        renderCalendar();
+        renderTimeline();
+        loadReservations();
+      })();
+    </script>
+  </body>
+</html>
